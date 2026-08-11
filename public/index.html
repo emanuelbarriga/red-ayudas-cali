@@ -284,6 +284,7 @@
             <th>Coordinador</th>
             <th>Técnico/AV</th>
             <th>Reporta</th>
+            <th>Fecha/Hora</th>
             <th>Estado</th>
             <th>Acción Rápida</th>
             <th>Borrar</th>
@@ -563,6 +564,7 @@
               ${fotoHTML}
               <p><strong>👤 Coord:</strong> ${escapeHTML(data.coordinador)}</p>
               <p><strong>📞 Reporta:</strong> ${escapeHTML(data.reporterNombre || '—')}${data.reporterTelefono ? ' (' + escapeHTML(data.reporterTelefono) + ')' : ''}</p>
+              <p><strong>🕐 Reporte:</strong> ${formatearFecha(data.timestamp)}</p>
               <p><strong>🛠️ Técnico en sitio:</strong> ${escapeHTML(data.tecnicoPresente)}</p>
               <p><strong>📦 Necesidades:</strong> ${escapeHTML(data.necesidades)}</p>
               <p><strong>⚠️ Situación:</strong> ${escapeHTML(data.situacion)}</p>
@@ -608,6 +610,38 @@
       CERRADO: '🟢 Resuelto'
     };
 
+    // Formatear el timestamp del reporte (Firestore Timestamp o serializado)
+    function formatearFecha(ts) {
+      if (!ts) return '—';
+      let fecha = null;
+      if (typeof ts.toDate === 'function') {
+        fecha = ts.toDate(); // Timestamp de Firestore en el cliente
+      } else if (ts.seconds) {
+        fecha = new Date(ts.seconds * 1000); // objeto serializado {seconds, nanoseconds}
+      } else if (typeof ts === 'string' || typeof ts === 'number') {
+        fecha = new Date(ts);
+      }
+      if (!fecha || isNaN(fecha.getTime())) return '—';
+      return fecha.toLocaleString('es-CO', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    // Insertar una fila ya en su posición por prioridad (sin re-sort global O(N²))
+    function insertarFilaOrdenada(tbody, filaNueva, prioridad) {
+      const orden = ORDEN_PRIORIDAD[prioridad] ?? 1;
+      for (let i = 0; i < tbody.children.length; i++) {
+        const child = tbody.children[i];
+        const p = ORDEN_PRIORIDAD[child.dataset.prioridad] ?? 1;
+        if (p > orden) {
+          tbody.insertBefore(filaNueva, child);
+          return;
+        }
+      }
+      tbody.appendChild(filaNueva);
+    }
+
     // Cache de los puntos visibles (no eliminados) para poder re-renderizar la
     // tabla cuando cambia el rol (público -> lectura -> editor) sin esperar un snapshot nuevo.
     const puntosCache = {}; // id -> { id, data }
@@ -621,7 +655,6 @@
         renderizarFilaTabla({ id: p.id, data: () => p.data }, 'added');
       });
     }
-
     // Renderizar/actualizar la fila de la tabla operativa (usa el esquema real)
     function renderizarFilaTabla(docRef, tipoCambio) {
       const tbody = document.getElementById('tabla-puntos-body');
@@ -673,28 +706,22 @@
           <td data-label="Coordinador">${escapeHTML(data.coordinador || 'N/A')}</td>
           <td data-label="Técnico/AV">${escapeHTML(data.tecnicoPresente || 'NO')}</td>
           <td data-label="Reporta">${escapeHTML(data.reporterNombre || '—')}${data.reporterTelefono ? ' <span style="color:#64748b;">(' + escapeHTML(data.reporterTelefono) + ')</span>' : ''}</td>
+          <td data-label="Fecha/Hora">${formatearFecha(data.timestamp)}</td>
           <td data-label="Estado">${columnaEstado}</td>
           <td data-label="Acción">${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
           ${columnaBorrar}
         </tr>
       `;
 
-      // Insertar o actualizar fila existente
+      // Insertar o actualizar fila existente: siempre se re-inserta en la
+      // posición correcta por prioridad (evita el re-sort global O(N²)).
       const filaExistente = document.getElementById('row-' + docId);
-      if (filaExistente) {
-        filaExistente.outerHTML = filaHTML;
-      } else {
-        tbody.insertAdjacentHTML('beforeend', filaHTML);
-      }
+      if (filaExistente) filaExistente.remove();
 
-      // Reordenar por prioridad (ALTA -> MEDIA -> BAJA)
-      Array.from(tbody.children)
-        .sort((a, b) => {
-          const pa = a.dataset.prioridad || 'MEDIA';
-          const pb = b.dataset.prioridad || 'MEDIA';
-          return (ORDEN_PRIORIDAD[pa] ?? 1) - (ORDEN_PRIORIDAD[pb] ?? 1);
-        })
-        .forEach(fila => tbody.appendChild(fila));
+      const tmp = document.createElement('div');
+      tmp.innerHTML = filaHTML;
+      const filaNueva = tmp.firstElementChild;
+      insertarFilaOrdenada(tbody, filaNueva, prioridad);
     }
 
     // Comprimir imagen en cliente (Canvas ~300 KB) antes de subir a Storage
