@@ -855,6 +855,10 @@
 
     // Funciones del Modal
     window.abrirModal = () => {
+      // Limpiar el formulario en cada apertura: evita que un intento cancelado
+      // deje el nombre/coordenadas del punto anterior.
+      limpiarFormulario();
+
       // NO se fuerza la vista al GPS: el pin central respeta donde el usuario
       // dejó el mapa (si quiere su posición exacta, usa el botón 📍 Mi ubicación
       // ANTES de abrir el formulario).
@@ -871,6 +875,23 @@
 
       document.getElementById('modalReporte').style.display = 'flex';
     };
+
+    // Limpia los campos del formulario de reporte (se llama al abrir el modal)
+    function limpiarFormulario() {
+      const ids = ['nombrePunto', 'coordinador', 'necesidades', 'situacion', 'fotoInput'];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      const coordsEl = document.getElementById('coordsText');
+      if (coordsEl) coordsEl.innerText = '';
+      const btnGuardar = document.getElementById('btnGuardar');
+      if (btnGuardar) {
+        btnGuardar.disabled = false;
+        btnGuardar.innerText = "Guardar y Publicar Punto";
+      }
+    }
+
     window.cerrarModal = () => document.getElementById('modalReporte').style.display = 'none';
   </script>
 </body>
