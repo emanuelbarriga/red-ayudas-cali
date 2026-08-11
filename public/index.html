@@ -460,6 +460,8 @@
         if (tabMapa) tabMapa.classList.remove('activa');
       }
     }
+    // Exponer en window: los onclick inline del HTML solo ven variables globales
+    window.mostrarVista = mostrarVista;
 
     // Botón "📋 Tabla": pide la clave (lectura o editor) si no hay acceso
     window.solicitarAccesoCoordinador = function() {
