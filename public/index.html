@@ -243,6 +243,26 @@
     </div>
   </div>
 
+  <!-- Modal Registro de Usuario (solo la primera vez por dispositivo) -->
+  <div class="modal" id="modalRegistro">
+    <div class="modal-content">
+      <h2>📝 Bienvenido a la Red</h2>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Para dejar registro de quién reporta cada punto, ingresa tus datos. Solo se piden una vez en este dispositivo.</p>
+
+      <div class="form-group">
+        <label>Tu Nombre</label>
+        <input type="text" id="registroNombre" placeholder="Ej: Daniela">
+      </div>
+
+      <div class="form-group">
+        <label>Tu Teléfono</label>
+        <input type="tel" id="registroTelefono" placeholder="Ej: 300 123 4567">
+      </div>
+
+      <button class="btn-submit" id="btnRegistro" onclick="guardarUsuario()">Guardar y Continuar</button>
+    </div>
+  </div>
+
   <!-- VISTA TABLA (SOLO COORDINADORES) -->
   <div id="vista-tabla" style="display:none; flex:1; overflow-y:auto;">
     <div class="tabla-container">
@@ -263,6 +283,7 @@
             <th>Necesidades Urgentes</th>
             <th>Coordinador</th>
             <th>Técnico/AV</th>
+            <th>Reporta</th>
             <th>Estado</th>
             <th>Acción Rápida</th>
             <th>Borrar</th>
@@ -541,6 +562,7 @@
               <h3>${escapeHTML(data.nombrePunto)}</h3>
               ${fotoHTML}
               <p><strong>👤 Coord:</strong> ${escapeHTML(data.coordinador)}</p>
+              <p><strong>📞 Reporta:</strong> ${escapeHTML(data.reporterNombre || '—')}${data.reporterTelefono ? ' (' + escapeHTML(data.reporterTelefono) + ')' : ''}</p>
               <p><strong>🛠️ Técnico en sitio:</strong> ${escapeHTML(data.tecnicoPresente)}</p>
               <p><strong>📦 Necesidades:</strong> ${escapeHTML(data.necesidades)}</p>
               <p><strong>⚠️ Situación:</strong> ${escapeHTML(data.situacion)}</p>
@@ -650,6 +672,7 @@
           <td data-label="Necesidades">${escapeHTML(data.necesidades || 'N/A')}</td>
           <td data-label="Coordinador">${escapeHTML(data.coordinador || 'N/A')}</td>
           <td data-label="Técnico/AV">${escapeHTML(data.tecnicoPresente || 'NO')}</td>
+          <td data-label="Reporta">${escapeHTML(data.reporterNombre || '—')}${data.reporterTelefono ? ' <span style="color:#64748b;">(' + escapeHTML(data.reporterTelefono) + ')</span>' : ''}</td>
           <td data-label="Estado">${columnaEstado}</td>
           <td data-label="Acción">${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
           ${columnaBorrar}
@@ -718,6 +741,9 @@
       return { lat: centro.lat, lng: centro.lng };
     }
 
+    // Usuario registrado en este dispositivo (cargado una vez)
+    let usuarioRegistrado = obtenerUsuarioRegistrado();
+
     // Guardar Punto en Firestore + Subir Foto
     window.guardarPunto = async function() {
       const nombre = document.getElementById('nombrePunto').value;
@@ -728,6 +754,14 @@
       const situacion = document.getElementById('situacion').value;
       const fotoFile = document.getElementById('fotoInput').files[0];
       const btnGuardar = document.getElementById('btnGuardar');
+
+      // Requiere registro previo (nombre y teléfono del dispositivo)
+      usuarioRegistrado = obtenerUsuarioRegistrado();
+      if (!usuarioRegistrado) {
+        alert("Por favor registra tu nombre y teléfono para continuar.");
+        document.getElementById('modalRegistro').style.display = 'flex';
+        return;
+      }
 
       if (!nombre || !coordinador) {
         alert("Por favor completa el nombre del punto y el coordinador.");
@@ -772,6 +806,9 @@
           lat: lat,
           lng: lng,
           estado: "ABIERTO",
+          // Datos de quien reporta (se piden una sola vez por dispositivo)
+          reporterNombre: (usuarioRegistrado && usuarioRegistrado.nombre) || null,
+          reporterTelefono: (usuarioRegistrado && usuarioRegistrado.telefono) || null,
           timestamp: serverTimestamp()
         });
 
@@ -893,6 +930,41 @@
     }
 
     window.cerrarModal = () => document.getElementById('modalReporte').style.display = 'none';
+
+    // ---------- Registro de usuario (una vez por dispositivo) ----------
+    const CLAVE_REGISTRO = 'redAyudasUsuario';
+
+    // Obtener los datos del usuario registrado en este dispositivo (o null)
+    function obtenerUsuarioRegistrado() {
+      try {
+        const raw = localStorage.getItem(CLAVE_REGISTRO);
+        if (!raw) return null;
+        const u = JSON.parse(raw);
+        if (u && u.nombre && u.telefono) return u;
+      } catch (e) { /* ignorar JSON corrupto */ }
+      return null;
+    }
+
+    // Guardar el registro y ocultar el modal
+    window.guardarUsuario = function() {
+      const nombre = document.getElementById('registroNombre').value.trim();
+      const telefono = document.getElementById('registroTelefono').value.trim();
+
+      if (!nombre || !telefono) {
+        alert("Por favor ingresa tu nombre y tu teléfono.");
+        return;
+      }
+
+      localStorage.setItem(CLAVE_REGISTRO, JSON.stringify({ nombre, telefono }));
+      document.getElementById('modalRegistro').style.display = 'none';
+    };
+
+    // Mostrar el registro la primera vez (al cargar la app)
+    (function verificarRegistroUsuario() {
+      if (!obtenerUsuarioRegistrado()) {
+        document.getElementById('modalRegistro').style.display = 'flex';
+      }
+    })();
   </script>
 </body>
 </html>
