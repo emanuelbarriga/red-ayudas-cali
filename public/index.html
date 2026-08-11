@@ -13,7 +13,20 @@
     body, html { height: 100%; width: 100%; display: flex; flex-direction: column; }
     header { background: #1e293b; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 1.1rem; }
-    #map { flex: 1; width: 100%; z-index: 1; }
+    #map-container { position: relative; flex: 1; width: 100%; min-height: 300px; }
+    #map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+
+    /* Visor central fijo (estilo Uber/Rappi): indica el punto a reportar */
+    .map-crosshair {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -100%);
+      pointer-events: none; z-index: 1000; text-align: center;
+    }
+    .map-crosshair .pin { font-size: 28px; line-height: 1; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5)); }
+    .map-crosshair .label {
+      background: rgba(0,0,0,0.75); color: white; padding: 2px 6px;
+      border-radius: 4px; font-size: 10px; white-space: nowrap;
+    }
 
     .btn-floating {
       position: absolute; bottom: 20px; right: 20px; z-index: 1000;
@@ -70,6 +83,35 @@
     .prio-MEDIA { background: #f59e0b; }
     .prio-BAJA { background: #16a34a; }
     #tabla-puntos select { padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; }
+
+    /* Adaptación Responsive para Móviles */
+    @media (max-width: 768px) {
+      body { display: flex; flex-direction: column; margin: 0; padding: 0; }
+
+      /* Mapa fijo arriba: deja ver la tabla/formulario debajo */
+      #map-container {
+        height: 45vh; width: 100%;
+        position: sticky; top: 0; z-index: 500;
+        flex: none; min-height: 0;
+      }
+
+      /* Tabla con scroll horizontal suave */
+      .tabla-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        margin-top: 10px;
+      }
+      #tabla-puntos { font-size: 12px; white-space: nowrap; }
+      #tabla-puntos th, #tabla-puntos td { padding: 8px 5px; }
+
+      /* Formulario: evita zoom automático en iOS */
+      .form-group input, .form-group select, .form-group textarea {
+        width: 100% !important;
+        box-sizing: border-box;
+        font-size: 16px !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -80,7 +122,15 @@
     <button class="btn-locate" onclick="obtenerMiUbicacion()">📍 Mi ubicación</button>
   </header>
 
-  <div id="map"></div>
+  <div id="map-container">
+    <div id="map"></div>
+
+    <!-- VISOR CENTRAL FIJO: indica el punto exacto a reportar -->
+    <div class="map-crosshair">
+      <div class="pin">📍</div>
+      <div class="label">Punto de reporte</div>
+    </div>
+  </div>
 
   <button class="btn-floating" onclick="abrirModal()">+ Reportar Punto</button>
 
@@ -88,7 +138,7 @@
   <div class="modal" id="modalReporte">
     <div class="modal-content">
       <h2>Nuevo Reporte en Sitio</h2>
-      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Se tomará tu ubicación GPS actual automáticamente.</p>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Mueve el mapa para ubicar el punto exacto con el pin central 📍. Se usará esa posición.</p>
 
       <div class="form-group">
         <label>Nombre del Punto / Lugar</label>
@@ -446,6 +496,12 @@
       });
     }
 
+    // Coordenadas del punto a reportar: el CENTRO del mapa (donde apunta el pin central)
+    function obtenerCoordenadasDelVisor() {
+      const centro = map.getCenter();
+      return { lat: centro.lat, lng: centro.lng };
+    }
+
     // Guardar Punto en Firestore + Subir Foto
     window.guardarPunto = async function() {
       const nombre = document.getElementById('nombrePunto').value;
@@ -462,10 +518,13 @@
         return;
       }
 
-      // Validación GPS: sin señal real, pedir confirmación explícita
-      if (!gpsConfirmado) {
-        const continuar = confirm("⚠️ No hemos podido obtener tu ubicación GPS exacta. ¿Deseas usar la ubicación central por defecto?");
-        if (!continuar) return;
+      // El punto se marca donde apunta el pin central (centro del mapa)
+      const { lat, lng } = obtenerCoordenadasDelVisor();
+
+      // Validar que el punto esté dentro del área de Cali (mismas reglas del servidor)
+      if (!(lat >= 3.20 && lat <= 3.55 && lng >= -76.65 && lng <= -76.45)) {
+        alert("⚠️ El pin central está fuera del área de Cali. Mueve el mapa para ubicar el punto dentro de la zona de cobertura.");
+        return;
       }
 
       btnGuardar.disabled = true;
@@ -494,8 +553,8 @@
           necesidades: necesidades,
           situacion: situacion,
           fotoUrl: fotoUrl,
-          lat: userLat,
-          lng: userLng,
+          lat: lat,
+          lng: lng,
           estado: "ABIERTO",
           timestamp: serverTimestamp()
         });
@@ -521,7 +580,14 @@
     };
 
     // Funciones del Modal
-    window.abrirModal = () => document.getElementById('modalReporte').style.display = 'flex';
+    window.abrirModal = () => {
+      // Punto de partida del pin central: tu posición GPS real si hay señal,
+      // luego el usuario ajusta moviendo el mapa.
+      if (gpsConfirmado) {
+        map.setView([userLat, userLng], 15);
+      }
+      document.getElementById('modalReporte').style.display = 'flex';
+    };
     window.cerrarModal = () => document.getElementById('modalReporte').style.display = 'none';
   </script>
 </body>
