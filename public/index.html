@@ -7,6 +7,9 @@
 
   <!-- Leaflet CSS (Mapa) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- MarkerCluster CSS: agrupa puntos cercanos mostrando el número -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
@@ -299,6 +302,8 @@
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- MarkerCluster JS: agrupa puntos cercanos -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
   <!-- Firebase SDKs -->
   <script type="module">
@@ -328,11 +333,15 @@
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
+    // Grupo de clústeres: agrupa puntos cercanos mostrando el número total
+    const clusterGroup = L.markerClusterGroup();
+    clusterGroup.addTo(map);
+
     let userLat = 3.4516;
     let userLng = -76.5320;
     let gpsConfirmado = false;
     let markers = {};
-    let miMarcador = null; // Marcador azul "Estás aquí"
+    let miMarcador = null; // Marcador azul "Estás aquí" (fuera del clúster)
 
     // Obtener GPS del usuario (gpsConfirmado = true solo con señal real)
     if (navigator.geolocation) {
@@ -541,7 +550,7 @@
             delete puntosCache[id];
           }
 
-          if (markers[id]) map.removeLayer(markers[id]);
+          if (markers[id]) clusterGroup.removeLayer(markers[id]);
 
           // Puntos ocultos (borrado suave): no se muestran en el mapa
           if (data.eliminado === true) {
@@ -551,7 +560,8 @@
           }
 
           const icon = getIconColor(data.estado, data.tecnicoPresente);
-          const marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
+          const marker = L.marker([data.lat, data.lng], { icon: icon });
+          clusterGroup.addLayer(marker); // se agrupa con los puntos cercanos
           const mapsUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
 
           // Solo permitir URLs http(s) como imagen; cualquier otra cosa se ignora
@@ -581,7 +591,7 @@
 
         if (change.type === "removed") {
           if (markers[id]) {
-            map.removeLayer(markers[id]);
+            clusterGroup.removeLayer(markers[id]);
             delete markers[id];
           }
           delete puntosCache[id];
