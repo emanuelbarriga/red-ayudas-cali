@@ -14,7 +14,10 @@ service cloud.firestore {
           && data.tecnicoPresente in ['SI', 'NO']
           && data.lat is number && data.lat >= 3.20 && data.lat <= 3.55
           && data.lng is number && data.lng >= -76.65 && data.lng <= -76.45
-          && data.estado in ['ABIERTO', 'EN_VERIFICACION', 'ATENDIENDO', 'CERRADO'];
+          && data.estado in ['ABIERTO', 'EN_VERIFICACION', 'ATENDIENDO', 'CERRADO']
+          // prioridad es opcional (documentos existentes no lo tienen);
+          // si aparece, debe estar en el dominio permitido
+          && (!data.keys().hasAny(['prioridad']) || data.prioridad in ['ALTA', 'MEDIA', 'BAJA']);
       }
 
       allow read: if true;
