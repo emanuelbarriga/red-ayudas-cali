@@ -30,6 +30,12 @@
       border-radius: 4px; font-size: 10px; white-space: nowrap;
     }
 
+    /* Íconos en blanco (silueta) sobre el fondo del botón */
+    .icono-blanco {
+      display: inline-block;
+      filter: grayscale(1) brightness(0) invert(1);
+    }
+
     /* Botones circulares solo-ícono */
     .btn-circle {
       display: flex; align-items: center; justify-content: center;
@@ -158,8 +164,8 @@
     <h1>📍 Red de Ayudas Cali</h1>
     <span id="gps-status" style="font-size:0.75rem; background:#334155; padding:4px 8px; border-radius:10px;">GPS: Buscando...</span>
     <div style="display:flex; gap:6px;">
-      <button class="btn-locate btn-circle" onclick="obtenerMiUbicacion()" title="Centrar en mi ubicación" aria-label="Centrar en mi ubicación">📍</button>
-      <button class="btn-coord" id="btn-coord" onclick="solicitarAccesoCoordinador()" title="Tabla de coordinación" aria-label="Tabla de coordinación">📋</button>
+      <button class="btn-locate btn-circle" onclick="obtenerMiUbicacion()" title="Centrar en mi ubicación" aria-label="Centrar en mi ubicación"><span class="icono-blanco">📍</span></button>
+      <button class="btn-coord" id="btn-coord" onclick="solicitarAccesoCoordinador()" title="Tabla de coordinación" aria-label="Tabla de coordinación"><span class="icono-blanco">📋</span></button>
     </div>
   </header>
 
@@ -175,7 +181,7 @@
       </div>
     </div>
 
-    <button class="btn-floating btn-circle" onclick="abrirModal()" title="Reportar punto" aria-label="Reportar punto">➕</button>
+    <button class="btn-floating btn-circle" onclick="abrirModal()" title="Reportar punto" aria-label="Reportar punto"><span class="icono-blanco">➕</span></button>
   </div>
 
   <!-- Modal Crear Solicitud -->
