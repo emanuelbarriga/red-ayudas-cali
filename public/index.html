@@ -15,6 +15,8 @@
     header h1 { font-size: 1.1rem; }
     #map-container { position: relative; flex: 1; width: 100%; min-height: 300px; }
     #map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+    /* Vista pública: el mapa ocupa todo el espacio disponible */
+    #vista-mapa { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
 
     /* Visor central fijo (estilo Uber/Rappi): indica el punto a reportar */
     .map-crosshair {
@@ -84,6 +86,12 @@
     .prio-BAJA { background: #16a34a; }
     #tabla-puntos select { padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; }
 
+    /* Botón modo coordinación */
+    .btn-coord {
+      background: #e74c3c; color: white; border: none; padding: 6px 10px;
+      border-radius: 10px; font-size: 0.75rem; font-weight: bold; cursor: pointer; white-space: nowrap;
+    }
+
     /* Adaptación Responsive para Móviles */
     @media (max-width: 768px) {
       body { display: flex; flex-direction: column; margin: 0; padding: 0; }
@@ -119,20 +127,26 @@
   <header>
     <h1>📍 Red de Ayudas Cali</h1>
     <span id="gps-status" style="font-size:0.75rem; background:#334155; padding:4px 8px; border-radius:10px;">GPS: Buscando...</span>
-    <button class="btn-locate" onclick="obtenerMiUbicacion()">📍 Mi ubicación</button>
+    <div style="display:flex; gap:6px;">
+      <button class="btn-locate" onclick="obtenerMiUbicacion()">📍 Mi ubicación</button>
+      <button class="btn-coord" id="btn-coord" onclick="solicitarAccesoCoordinador()">📋 Tabla</button>
+    </div>
   </header>
 
-  <div id="map-container">
-    <div id="map"></div>
+  <!-- VISTA MAPA (PÚBLICO) -->
+  <div id="vista-mapa">
+    <div id="map-container">
+      <div id="map"></div>
 
-    <!-- VISOR CENTRAL FIJO: indica el punto exacto a reportar -->
-    <div class="map-crosshair">
-      <div class="pin">📍</div>
-      <div class="label">Punto de reporte</div>
+      <!-- VISOR CENTRAL FIJO: indica el punto exacto a reportar -->
+      <div class="map-crosshair">
+        <div class="pin">📍</div>
+        <div class="label">Punto de reporte</div>
+      </div>
     </div>
-  </div>
 
-  <button class="btn-floating" onclick="abrirModal()">+ Reportar Punto</button>
+    <button class="btn-floating" onclick="abrirModal()">+ Reportar Punto</button>
+  </div>
 
   <!-- Modal Crear Solicitud -->
   <div class="modal" id="modalReporte">
@@ -188,25 +202,30 @@
     </div>
   </div>
 
-  <!-- TABLA DE CONTROL DE OPERACIONES -->
-  <div class="tabla-container">
-    <h2>📋 Matriz de Prioridades y Despachos</h2>
-    <table id="tabla-puntos">
-      <thead>
-        <tr>
-          <th>Prioridad</th>
-          <th>Punto / Sector</th>
-          <th>Necesidades Urgentes</th>
-          <th>Coordinador</th>
-          <th>Técnico/AV</th>
-          <th>Estado</th>
-          <th>Acción Rápida</th>
-        </tr>
-      </thead>
-      <tbody id="tabla-puntos-body">
-        <!-- Se llena dinámicamente desde Firestore -->
-      </tbody>
-    </table>
+  <!-- VISTA TABLA (SOLO COORDINADORES) -->
+  <div id="vista-tabla" style="display:none; flex:1; overflow-y:auto;">
+    <div class="tabla-container">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h2>📋 Matriz de Prioridades y Despachos</h2>
+        <button class="btn-coord" onclick="cerrarModoCoordinador()" style="background:#64748b;">🔒 Salir de Coordinación</button>
+      </div>
+      <table id="tabla-puntos">
+        <thead>
+          <tr>
+            <th>Prioridad</th>
+            <th>Punto / Sector</th>
+            <th>Necesidades Urgentes</th>
+            <th>Coordinador</th>
+            <th>Técnico/AV</th>
+            <th>Estado</th>
+            <th>Acción Rápida</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-puntos-body">
+          <!-- Se llena dinámicamente desde Firestore -->
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <!-- Leaflet JS -->
@@ -310,6 +329,61 @@
       );
     };
 
+    // ⚠️ ACCESO COORDINADOR — clave simple en el cliente (NO es seguridad real,
+    // solo separa la UI pública de la vista operativa. Ver notas en README/issue).
+    const CLAVE_COORDINADOR = "cali2026"; // CAMBIA esta clave con tu equipo
+    let esCoordinador = false;
+
+    // Comprobar acceso guardado en este dispositivo o por URL (?admin=cali2026)
+    (function verificarAccesoCoordinador() {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('admin') === CLAVE_COORDINADOR) {
+        esCoordinador = true;
+        localStorage.setItem('esCoordinador', 'true');
+      } else if (localStorage.getItem('esCoordinador') === 'true') {
+        esCoordinador = true;
+      }
+    })();
+
+    // Alternar entre vista mapa (público) y tabla (coordinación)
+    function mostrarVista(vista) {
+      const vMapa = document.getElementById('vista-mapa');
+      const vTabla = document.getElementById('vista-tabla');
+
+      if (vista === 'mapa') {
+        vMapa.style.display = 'flex';
+        vTabla.style.display = 'none';
+        // Forzar recálculo del tamaño del mapa al volver (Leaflet necesita saber su nuevo tamaño)
+        setTimeout(() => map.invalidateSize(), 200);
+      } else {
+        vMapa.style.display = 'none';
+        vTabla.style.display = 'block';
+      }
+    }
+
+    // Botón "📋 Tabla": pide la clave si no es coordinador
+    window.solicitarAccesoCoordinador = function() {
+      if (esCoordinador) {
+        mostrarVista('tabla');
+        return;
+      }
+      const pass = prompt("Acceso restringido a coordinadores.\nIngresa la clave de acceso:");
+      if (pass === CLAVE_COORDINADOR) {
+        esCoordinador = true;
+        localStorage.setItem('esCoordinador', 'true');
+        mostrarVista('tabla');
+      } else if (pass !== null) {
+        alert("Clave incorrecta.");
+      }
+    };
+
+    // Botón "🔒 Salir de Coordinación"
+    window.cerrarModoCoordinador = function() {
+      esCoordinador = false;
+      localStorage.removeItem('esCoordinador');
+      mostrarVista('mapa');
+    };
+
     // Colores de los Pines
     function getIconColor(estado, tieneTecnico) {
       let color = "red";
@@ -357,12 +431,6 @@
               <p><strong>⚠️ Situación:</strong> ${escapeHTML(data.situacion)}</p>
               <p><strong>📍 Coordenadas:</strong> ${typeof data.lat === 'number' && typeof data.lng === 'number' ? `${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}` : 'N/A'}</p>
               <p><a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ver en Google Maps</a></p>
-
-              <div class="popup-actions">
-                <button class="btn-status" style="background:#f59e0b;" onclick="cambiarEstado('${id}', 'EN_VERIFICACION')">🟡 En Verificación (Enviar Técnico)</button>
-                <button class="btn-status" style="background:#2563eb;" onclick="cambiarEstado('${id}', 'ATENDIENDO')">🔵 Atendiendo / En Camino</button>
-                <button class="btn-status" style="background:#16a34a;" onclick="cambiarEstado('${id}', 'CERRADO')">🟢 Marcar Atendido / Cerrar</button>
-              </div>
             </div>
           `;
 
