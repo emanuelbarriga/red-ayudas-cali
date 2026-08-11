@@ -236,8 +236,11 @@
   <!-- VISTA TABLA (SOLO COORDINADORES) -->
   <div id="vista-tabla" style="display:none; flex:1; overflow-y:auto;">
     <div class="tabla-container">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-        <h2>📋 Matriz de Prioridades y Despachos</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2>📋 Matriz de Prioridades y Despachos</h2>
+          <span id="badge-rol" style="color:white; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; display:inline-block; margin-top:4px;"></span>
+        </div>
         <button class="btn-coord" onclick="cerrarModoCoordinador()" title="Volver al mapa" aria-label="Volver al mapa" style="background:#64748b;">🗺️</button>
       </div>
       <table id="tabla-puntos">
@@ -361,21 +364,46 @@
       );
     };
 
-    // ⚠️ ACCESO COORDINADOR — clave simple en el cliente (NO es seguridad real,
-    // solo separa la UI pública de la vista operativa. Ver notas en README/issue).
-    const CLAVE_COORDINADOR = "cali2026"; // CAMBIA esta clave con tu equipo
-    let esCoordinador = false;
+    // ⚠️ ACCESO POR ROLES — claves simples en el cliente (NO es seguridad real,
+    // solo separa la UI pública de la vista operativa).
+    const CLAVE_SOLO_LECTURA = "ver2026"; // Cambia estas claves con tu equipo
+    const CLAVE_EDITOR = "admin2026";     // Cambia estas claves con tu equipo
+    let nivelAcceso = 'ninguno'; // 'ninguno' | 'lectura' | 'editor'
 
-    // Comprobar acceso guardado en este dispositivo o por URL (?admin=cali2026)
-    (function verificarAccesoCoordinador() {
+    // Comprobar acceso guardado en este dispositivo o por URL (?pass=ver2026|admin2026)
+    (function verificarNivelAcceso() {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('admin') === CLAVE_COORDINADOR) {
-        esCoordinador = true;
-        localStorage.setItem('esCoordinador', 'true');
-      } else if (localStorage.getItem('esCoordinador') === 'true') {
-        esCoordinador = true;
+      const passURL = urlParams.get('pass');
+      // Compatibilidad: el antiguo ?admin=cali2026 se trata como editor
+      const passAntigua = urlParams.get('admin');
+
+      if (passURL === CLAVE_EDITOR || passAntigua === 'cali2026') {
+        nivelAcceso = 'editor';
+        localStorage.setItem('nivelAccesoTabla', 'editor');
+      } else if (passURL === CLAVE_SOLO_LECTURA) {
+        nivelAcceso = 'lectura';
+        localStorage.setItem('nivelAccesoTabla', 'lectura');
+      } else {
+        const guardado = localStorage.getItem('nivelAccesoTabla');
+        if (guardado === 'lectura' || guardado === 'editor') nivelAcceso = guardado;
       }
+      actualizarIndicadorRol();
     })();
+
+    function actualizarIndicadorRol() {
+      const badge = document.getElementById('badge-rol');
+      if (!badge) return;
+      if (nivelAcceso === 'editor') {
+        badge.style.background = '#16a34a';
+        badge.innerText = '✏️ Modo Editor / Coordinador';
+      } else if (nivelAcceso === 'lectura') {
+        badge.style.background = '#0ea5e9';
+        badge.innerText = '👁️ Modo Solo Lectura';
+      } else {
+        badge.style.background = '#64748b';
+        badge.innerText = '🔒 Sin Autenticar';
+      }
+    }
 
     // Alternar entre vista mapa (público) y tabla (coordinación)
     function mostrarVista(vista) {
@@ -393,24 +421,30 @@
       }
     }
 
-    // Botón "📋 Tabla": pide la clave si no es coordinador
+    // Botón "📋 Tabla": pide la clave (lectura o editor) si no hay acceso
     window.solicitarAccesoCoordinador = function() {
-      if (esCoordinador) {
+      if (nivelAcceso !== 'ninguno') {
         mostrarVista('tabla');
         return;
       }
-      const pass = prompt("Acceso restringido a coordinadores.\nIngresa la clave de acceso:");
-      if (pass === CLAVE_COORDINADOR) {
-        esCoordinador = true;
-        localStorage.setItem('esCoordinador', 'true');
+      const pass = prompt("Ingresa la clave de la tabla:\n• Clave de Consulta (Solo lectura)\n• Clave de Coordinador (Editar estados)");
+      if (pass === CLAVE_EDITOR) {
+        nivelAcceso = 'editor';
+        localStorage.setItem('nivelAccesoTabla', 'editor');
+        actualizarIndicadorRol();
+        mostrarVista('tabla');
+      } else if (pass === CLAVE_SOLO_LECTURA) {
+        nivelAcceso = 'lectura';
+        localStorage.setItem('nivelAccesoTabla', 'lectura');
+        actualizarIndicadorRol();
         mostrarVista('tabla');
       } else if (pass !== null) {
         alert("Clave incorrecta.");
       }
     };
 
-    // Volver al mapa: la clave queda guardada en el dispositivo (no se borra),
-    // así el coordinador no tiene que volver a digitarla.
+    // Volver al mapa: el acceso queda guardado en el dispositivo (no se borra),
+    // así el coordinador no tiene que volver a digitar la clave.
     window.cerrarModoCoordinador = function() {
       mostrarVista('mapa');
     };
@@ -531,9 +565,25 @@
 
       const prioridad = ORDEN_PRIORIDAD[data.prioridad] !== undefined ? data.prioridad : 'MEDIA';
       const estado = ETIQUETAS_ESTADO[data.estado] ? data.estado : 'ABIERTO';
+      const esModoEditor = (nivelAcceso === 'editor');
       const mapsUrl = (typeof data.lat === 'number' && typeof data.lng === 'number')
         ? `https://maps.google.com/?q=${data.lat},${data.lng}`
         : null;
+
+      // Solo los editores pueden cambiar estados; los lectores ven la etiqueta fija
+      const columnaEstado = esModoEditor
+        ? `<select onchange="cambiarEstado('${docId}', this.value)">
+              <option value="ABIERTO" ${estado === 'ABIERTO' ? 'selected' : ''}>🔴 Pendiente</option>
+              <option value="EN_VERIFICACION" ${estado === 'EN_VERIFICACION' ? 'selected' : ''}>🟡 En Verificación</option>
+              <option value="ATENDIENDO" ${estado === 'ATENDIENDO' ? 'selected' : ''}>🔵 Atendiendo</option>
+              <option value="CERRADO" ${estado === 'CERRADO' ? 'selected' : ''}>🟢 Resuelto</option>
+            </select>`
+        : `<span style="font-weight:bold; padding:4px 8px; border-radius:4px; display:inline-block; background:#f1f5f9;">${escapeHTML(ETIQUETAS_ESTADO[estado] || estado)}</span>`;
+
+      // Solo los editores pueden ocultar puntos
+      const columnaBorrar = esModoEditor
+        ? `<td data-label="Borrar"><button class="btn-status" style="background:#dc2626;" onclick="borrarPunto('${docId}')" title="Ocultar punto" aria-label="Ocultar punto">🗑️</button></td>`
+        : '<td data-label="Borrar">—</td>';
 
       const filaHTML = `
         <tr id="row-${docId}" data-prioridad="${prioridad}">
@@ -542,16 +592,9 @@
           <td data-label="Necesidades">${escapeHTML(data.necesidades || 'N/A')}</td>
           <td data-label="Coordinador">${escapeHTML(data.coordinador || 'N/A')}</td>
           <td data-label="Técnico/AV">${escapeHTML(data.tecnicoPresente || 'NO')}</td>
-          <td data-label="Estado">
-            <select onchange="cambiarEstado('${docId}', this.value)">
-              <option value="ABIERTO" ${estado === 'ABIERTO' ? 'selected' : ''}>🔴 Pendiente</option>
-              <option value="EN_VERIFICACION" ${estado === 'EN_VERIFICACION' ? 'selected' : ''}>🟡 En Verificación</option>
-              <option value="ATENDIENDO" ${estado === 'ATENDIENDO' ? 'selected' : ''}>🔵 Atendiendo</option>
-              <option value="CERRADO" ${estado === 'CERRADO' ? 'selected' : ''}>🟢 Resuelto</option>
-            </select>
-          </td>
+          <td data-label="Estado">${columnaEstado}</td>
           <td data-label="Acción">${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
-          <td data-label="Borrar"><button class="btn-status" style="background:#dc2626;" onclick="borrarPunto('${docId}')" title="Ocultar punto" aria-label="Ocultar punto">🗑️</button></td>
+          ${columnaBorrar}
         </tr>
       `;
 
@@ -697,8 +740,8 @@
     // Borrado suave: marca el punto como eliminado (desaparece del mapa y la tabla,
     // pero el documento queda en Firestore y las reglas siguen bloqueando el borrado real).
     window.borrarPunto = async function(id) {
-      if (!esCoordinador) {
-        alert("Acción solo para coordinadores.");
+      if (nivelAcceso !== 'editor') {
+        alert("Acción solo para coordinadores (modo editor).");
         return;
       }
       const confirmar = confirm("⚠️ ¿Seguro que deseas OCULTAR este punto? Desaparecerá del mapa y de la tabla, pero quedará guardado en el sistema por seguridad.");
