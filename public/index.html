@@ -219,6 +219,7 @@
             <th>Técnico/AV</th>
             <th>Estado</th>
             <th>Acción Rápida</th>
+            <th>Borrar</th>
           </tr>
         </thead>
         <tbody id="tabla-puntos-body">
@@ -411,6 +412,13 @@
         if (change.type === "added" || change.type === "modified") {
           if (markers[id]) map.removeLayer(markers[id]);
 
+          // Puntos ocultos (borrado suave): no se muestran en el mapa
+          if (data.eliminado === true) {
+            delete markers[id];
+            renderizarFilaTabla(change.doc, change.type); // también los oculta de la tabla
+            return;
+          }
+
           const icon = getIconColor(data.estado, data.tecnicoPresente);
           const marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
           const mapsUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
@@ -483,6 +491,14 @@
 
       const data = docRef.data();
       const docId = docRef.id;
+
+      // Borrado suave: ocultar la fila si el punto está marcado como eliminado
+      if (data.eliminado === true) {
+        const filaOculta = document.getElementById('row-' + docId);
+        if (filaOculta) filaOculta.remove();
+        return;
+      }
+
       const prioridad = ORDEN_PRIORIDAD[data.prioridad] !== undefined ? data.prioridad : 'MEDIA';
       const estado = ETIQUETAS_ESTADO[data.estado] ? data.estado : 'ABIERTO';
       const mapsUrl = (typeof data.lat === 'number' && typeof data.lng === 'number')
@@ -505,6 +521,7 @@
             </select>
           </td>
           <td>${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
+          <td><button class="btn-status" style="background:#dc2626;" onclick="borrarPunto('${docId}')">🗑️ Borrar</button></td>
         </tr>
       `;
 
@@ -644,6 +661,23 @@
         await updateDoc(puntoRef, { estado: nuevoEstado });
       } catch (e) {
         alert("Error actualizando estado: " + e.message);
+      }
+    };
+
+    // Borrado suave: marca el punto como eliminado (desaparece del mapa y la tabla,
+    // pero el documento queda en Firestore y las reglas siguen bloqueando el borrado real).
+    window.borrarPunto = async function(id) {
+      if (!esCoordinador) {
+        alert("Acción solo para coordinadores.");
+        return;
+      }
+      const confirmar = confirm("⚠️ ¿Seguro que deseas OCULTAR este punto? Desaparecerá del mapa y de la tabla, pero quedará guardado en el sistema por seguridad.");
+      if (!confirmar) return;
+      try {
+        const puntoRef = doc(db, "puntos_cali", id);
+        await updateDoc(puntoRef, { eliminado: true });
+      } catch (e) {
+        alert("Error ocultando el punto: " + e.message);
       }
     };
 
