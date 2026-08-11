@@ -36,6 +36,15 @@
       filter: grayscale(1) brightness(0) invert(1);
     }
 
+    /* Pestañas de navegación (texto) */
+    .nav-tabs { display: flex; gap: 4px; background: #1e293b; padding: 6px 10px; }
+    .nav-tab {
+      background: transparent; color: #94a3b8; border: none;
+      padding: 8px 14px; border-radius: 8px; font-size: 0.9rem;
+      font-weight: bold; cursor: pointer;
+    }
+    .nav-tab.activa { background: #334155; color: white; }
+
     /* Botones circulares solo-ícono */
     .btn-circle {
       display: flex; align-items: center; justify-content: center;
@@ -99,14 +108,6 @@
     .prio-BAJA { background: #16a34a; }
     #tabla-puntos select { padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 0.8rem; }
 
-    /* Botón modo coordinación */
-    .btn-coord {
-      background: #e74c3c; color: white; border: none;
-      border-radius: 50%; font-size: 1rem; cursor: pointer; white-space: nowrap;
-      display: flex; align-items: center; justify-content: center;
-      width: 36px; height: 36px; padding: 0;
-    }
-
     /* Adaptación Responsive para Móviles */
     @media (max-width: 768px) {
       body { display: flex; flex-direction: column; margin: 0; padding: 0; }
@@ -163,11 +164,13 @@
   <header>
     <h1>📍 Red de Ayudas Cali</h1>
     <span id="gps-status" style="font-size:0.75rem; background:#334155; padding:4px 8px; border-radius:10px;">GPS: Buscando...</span>
-    <div style="display:flex; gap:6px;">
-      <button class="btn-locate btn-circle" onclick="obtenerMiUbicacion()" title="Centrar en mi ubicación" aria-label="Centrar en mi ubicación"><span class="icono-blanco">📍</span></button>
-      <button class="btn-coord" id="btn-coord" onclick="solicitarAccesoCoordinador()" title="Tabla de coordinación" aria-label="Tabla de coordinación"><span class="icono-blanco">📋</span></button>
-    </div>
   </header>
+
+  <!-- Pestañas de navegación: Mapa (público) y Tabla (coordinación) -->
+  <div class="nav-tabs">
+    <button class="nav-tab activa" id="tab-mapa" onclick="mostrarVista('mapa')">🗺️ Mapa</button>
+    <button class="nav-tab" id="tab-tabla" onclick="solicitarAccesoCoordinador()">📋 Tabla</button>
+  </div>
 
   <!-- VISTA MAPA (PÚBLICO) -->
   <div id="vista-mapa">
@@ -182,6 +185,7 @@
     </div>
 
     <button class="btn-floating btn-circle" onclick="abrirModal()" title="Reportar punto" aria-label="Reportar punto"><span class="icono-blanco">➕</span></button>
+    <button class="btn-locate btn-circle" onclick="obtenerMiUbicacion()" title="Centrar en mi ubicación" aria-label="Centrar en mi ubicación"><span class="icono-blanco">📍</span></button>
   </div>
 
   <!-- Modal Crear Solicitud -->
@@ -248,8 +252,7 @@
           <span id="badge-rol" style="color:white; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; display:inline-block; margin-top:4px;"></span>
         </div>
         <div style="display:flex; gap:6px;">
-          <button class="btn-coord" onclick="cambiarRol()" title="Cambiar de rol (lectura/editor)" aria-label="Cambiar de rol" style="background:#7c3aed;">🔄</button>
-          <button class="btn-coord" onclick="cerrarModoCoordinador()" title="Volver al mapa" aria-label="Volver al mapa" style="background:#64748b;">🗺️</button>
+          <button class="nav-tab" onclick="cambiarRol()" title="Cambiar de rol (lectura/editor)" aria-label="Cambiar de rol" style="background:#7c3aed; color:white;">🔄 Cambiar rol</button>
         </div>
       </div>
       <table id="tabla-puntos">
@@ -418,15 +421,21 @@
     function mostrarVista(vista) {
       const vMapa = document.getElementById('vista-mapa');
       const vTabla = document.getElementById('vista-tabla');
+      const tabMapa = document.getElementById('tab-mapa');
+      const tabTabla = document.getElementById('tab-tabla');
 
       if (vista === 'mapa') {
         vMapa.style.display = 'flex';
         vTabla.style.display = 'none';
+        if (tabMapa) tabMapa.classList.add('activa');
+        if (tabTabla) tabTabla.classList.remove('activa');
         // Forzar recálculo del tamaño del mapa al volver (Leaflet necesita saber su nuevo tamaño)
         setTimeout(() => map.invalidateSize(), 200);
       } else {
         vMapa.style.display = 'none';
         vTabla.style.display = 'block';
+        if (tabTabla) tabTabla.classList.add('activa');
+        if (tabMapa) tabMapa.classList.remove('activa');
       }
     }
 
@@ -471,6 +480,7 @@
 
     // Volver al mapa: el acceso queda guardado en el dispositivo (no se borra),
     // así el coordinador no tiene que volver a digitar la clave.
+    // (La navegación ahora usa las pestañas Mapa/Tabla; se mantiene por compatibilidad.)
     window.cerrarModoCoordinador = function() {
       mostrarVista('mapa');
     };
