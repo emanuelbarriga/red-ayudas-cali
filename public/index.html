@@ -102,15 +102,37 @@
       }
       #vista-mapa { flex: 1; min-height: 0; }
 
-      /* Tabla con scroll horizontal suave */
+      /* Tabla con scroll horizontal suave en escritorio; en móvil se convierte en tarjetas */
       .tabla-container {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         width: 100%;
         margin-top: 10px;
       }
-      #tabla-puntos { font-size: 12px; white-space: nowrap; }
-      #tabla-puntos th, #tabla-puntos td { padding: 8px 5px; }
+
+      /* MODO TARJETAS en móvil: cada punto es una card apilada, sin scroll horizontal */
+      #tabla-puntos thead { display: none; }
+      #tabla-puntos, #tabla-puntos tbody, #tabla-puntos tr, #tabla-puntos td {
+        display: block; width: 100%;
+      }
+      #tabla-puntos tr {
+        border: 1px solid #e2e8f0; border-radius: 12px;
+        margin-bottom: 10px; padding: 10px; background: white;
+      }
+      #tabla-puntos td {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 2px; border: none; font-size: 13px; white-space: normal;
+        gap: 12px;
+      }
+      #tabla-puntos td::before {
+        content: attr(data-label);
+        font-weight: bold; color: #64748b; font-size: 11px;
+        text-transform: uppercase; flex-shrink: 0;
+      }
+      #tabla-puntos td:first-child { padding-top: 2px; }
+      #tabla-puntos td:last-child { border-bottom: none; }
+      #tabla-puntos select { font-size: 13px; }
+      .tabla-container { overflow-x: visible; }
 
       /* Formulario: evita zoom automático en iOS */
       .form-group input, .form-group select, .form-group textarea {
@@ -207,7 +229,7 @@
     <div class="tabla-container">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
         <h2>📋 Matriz de Prioridades y Despachos</h2>
-        <button class="btn-coord" onclick="cerrarModoCoordinador()" style="background:#64748b;">🔒 Salir de Coordinación</button>
+        <button class="btn-coord" onclick="cerrarModoCoordinador()" style="background:#64748b;">🗺️ Ver Mapa</button>
       </div>
       <table id="tabla-puntos">
         <thead>
@@ -378,10 +400,9 @@
       }
     };
 
-    // Botón "🔒 Salir de Coordinación"
+    // Volver al mapa: la clave queda guardada en el dispositivo (no se borra),
+    // así el coordinador no tiene que volver a digitarla.
     window.cerrarModoCoordinador = function() {
-      esCoordinador = false;
-      localStorage.removeItem('esCoordinador');
       mostrarVista('mapa');
     };
 
@@ -507,12 +528,12 @@
 
       const filaHTML = `
         <tr id="row-${docId}" data-prioridad="${prioridad}">
-          <td><span class="prio-badge prio-${prioridad}">${escapeHTML(prioridad)}</span></td>
-          <td><strong>${escapeHTML(data.nombrePunto || 'Sin Nombre')}</strong></td>
-          <td>${escapeHTML(data.necesidades || 'N/A')}</td>
-          <td>${escapeHTML(data.coordinador || 'N/A')}</td>
-          <td>${escapeHTML(data.tecnicoPresente || 'NO')}</td>
-          <td>
+          <td data-label="Prioridad"><span class="prio-badge prio-${prioridad}">${escapeHTML(prioridad)}</span></td>
+          <td data-label="Punto / Sector"><strong>${escapeHTML(data.nombrePunto || 'Sin Nombre')}</strong></td>
+          <td data-label="Necesidades">${escapeHTML(data.necesidades || 'N/A')}</td>
+          <td data-label="Coordinador">${escapeHTML(data.coordinador || 'N/A')}</td>
+          <td data-label="Técnico/AV">${escapeHTML(data.tecnicoPresente || 'NO')}</td>
+          <td data-label="Estado">
             <select onchange="cambiarEstado('${docId}', this.value)">
               <option value="ABIERTO" ${estado === 'ABIERTO' ? 'selected' : ''}>🔴 Pendiente</option>
               <option value="EN_VERIFICACION" ${estado === 'EN_VERIFICACION' ? 'selected' : ''}>🟡 En Verificación</option>
@@ -520,8 +541,8 @@
               <option value="CERRADO" ${estado === 'CERRADO' ? 'selected' : ''}>🟢 Resuelto</option>
             </select>
           </td>
-          <td>${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
-          <td><button class="btn-status" style="background:#dc2626;" onclick="borrarPunto('${docId}')">🗑️ Borrar</button></td>
+          <td data-label="Acción">${mapsUrl ? `<a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ir a Maps</a>` : '—'}</td>
+          <td data-label="Borrar"><button class="btn-status" style="background:#dc2626;" onclick="borrarPunto('${docId}')">🗑️ Borrar</button></td>
         </tr>
       `;
 
