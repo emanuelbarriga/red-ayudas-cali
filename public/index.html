@@ -247,7 +247,10 @@
           <h2>📋 Matriz de Prioridades y Despachos</h2>
           <span id="badge-rol" style="color:white; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:bold; display:inline-block; margin-top:4px;"></span>
         </div>
-        <button class="btn-coord" onclick="cerrarModoCoordinador()" title="Volver al mapa" aria-label="Volver al mapa" style="background:#64748b;">🗺️</button>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-coord" onclick="cambiarRol()" title="Cambiar de rol (lectura/editor)" aria-label="Cambiar de rol" style="background:#7c3aed;">🔄</button>
+          <button class="btn-coord" onclick="cerrarModoCoordinador()" title="Volver al mapa" aria-label="Volver al mapa" style="background:#64748b;">🗺️</button>
+        </div>
       </div>
       <table id="tabla-puntos">
         <thead>
@@ -434,6 +437,11 @@
         return;
       }
       const pass = prompt("Ingresa la clave de la tabla:\n• Clave de Consulta (Solo lectura)\n• Clave de Coordinador (Editar estados)");
+      aplicarClave(pass);
+    };
+
+    // Aplica la clave digitada al rol correspondiente (y re-renderiza la tabla)
+    function aplicarClave(pass) {
       if (pass === CLAVE_EDITOR) {
         nivelAcceso = 'editor';
         localStorage.setItem('nivelAccesoTabla', 'editor');
@@ -446,6 +454,16 @@
         actualizarIndicadorRol();
         reRenderizarTabla();
         mostrarVista('tabla');
+      } else if (pass !== null && pass !== '') {
+        alert("Clave incorrecta.");
+      }
+    }
+
+    // Cambiar de rol en vivo (ej: de solo lectura a editor) sin borrar la sesión
+    window.cambiarRol = function() {
+      const pass = prompt("Ingresa la clave del nuevo rol:\n• Clave de Consulta (Solo lectura)\n• Clave de Coordinador (Editar estados)\n\n(Actual: " + (nivelAcceso === 'editor' ? 'Editor' : nivelAcceso === 'lectura' ? 'Solo lectura' : 'Sin autenticar') + ")");
+      if (pass === CLAVE_EDITOR || pass === CLAVE_SOLO_LECTURA) {
+        aplicarClave(pass);
       } else if (pass !== null) {
         alert("Clave incorrecta.");
       }
