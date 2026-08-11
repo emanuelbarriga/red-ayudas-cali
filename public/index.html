@@ -438,11 +438,13 @@
         nivelAcceso = 'editor';
         localStorage.setItem('nivelAccesoTabla', 'editor');
         actualizarIndicadorRol();
+        reRenderizarTabla();
         mostrarVista('tabla');
       } else if (pass === CLAVE_SOLO_LECTURA) {
         nivelAcceso = 'lectura';
         localStorage.setItem('nivelAccesoTabla', 'lectura');
         actualizarIndicadorRol();
+        reRenderizarTabla();
         mostrarVista('tabla');
       } else if (pass !== null) {
         alert("Clave incorrecta.");
@@ -480,6 +482,13 @@
         const id = change.doc.id;
 
         if (change.type === "added" || change.type === "modified") {
+          // Actualizar cache (solo puntos visibles)
+          if (data.eliminado !== true) {
+            puntosCache[id] = { id, data };
+          } else {
+            delete puntosCache[id];
+          }
+
           if (markers[id]) map.removeLayer(markers[id]);
 
           // Puntos ocultos (borrado suave): no se muestran en el mapa
@@ -521,6 +530,7 @@
             map.removeLayer(markers[id]);
             delete markers[id];
           }
+          delete puntosCache[id];
         }
 
         // Sincronizar la tabla operativa con el mismo snapshot
@@ -547,6 +557,20 @@
       ATENDIENDO: '🔵 Atendiendo',
       CERRADO: '🟢 Resuelto'
     };
+
+    // Cache de los puntos visibles (no eliminados) para poder re-renderizar la
+    // tabla cuando cambia el rol (público -> lectura -> editor) sin esperar un snapshot nuevo.
+    const puntosCache = {}; // id -> { id, data }
+
+    // Re-renderizar TODA la tabla con el rol actual
+    function reRenderizarTabla() {
+      const tbody = document.getElementById('tabla-puntos-body');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      Object.values(puntosCache).forEach((p) => {
+        renderizarFilaTabla({ id: p.id, data: () => p.data }, 'added');
+      });
+    }
 
     // Renderizar/actualizar la fila de la tabla operativa (usa el esquema real)
     function renderizarFilaTabla(docRef, tipoCambio) {
@@ -803,11 +827,9 @@
 
     // Funciones del Modal
     window.abrirModal = () => {
-      // Punto de partida del pin central: tu posición GPS real si hay señal,
-      // luego el usuario ajusta moviendo el mapa.
-      if (gpsConfirmado) {
-        map.setView([userLat, userLng], 15);
-      }
+      // NO se fuerza la vista al GPS: el pin central respeta donde el usuario
+      // dejó el mapa (si quiere su posición exacta, usa el botón 📍 Mi ubicación
+      // ANTES de abrir el formulario).
 
       // Confirmación visual de la coordenada seleccionada con el pin
       const centro = map.getCenter();
