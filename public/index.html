@@ -730,10 +730,14 @@
       const filaExistente = document.getElementById('row-' + docId);
       if (filaExistente) filaExistente.remove();
 
-      const tmp = document.createElement('div');
-      tmp.innerHTML = filaHTML;
-      const filaNueva = tmp.firstElementChild;
-      insertarFilaOrdenada(tbody, filaNueva, prioridad);
+      // Usar <template>: un <tr> NO es hijo válido de un <div>, el navegador lo
+      // descartaría al parsear y firstElementChild sería null (tabla vacía).
+      const tmp = document.createElement('template');
+      tmp.innerHTML = filaHTML.trim();
+      const filaNueva = tmp.content.firstElementChild;
+      if (filaNueva) {
+        insertarFilaOrdenada(tbody, filaNueva, prioridad);
+      }
     }
 
     // Comprimir imagen en cliente (Canvas ~300 KB) antes de subir a Storage
