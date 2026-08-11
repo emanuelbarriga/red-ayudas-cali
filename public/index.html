@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Red de Ayudas Cali</title>
+
+  <!-- Leaflet CSS (Mapa) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+    body, html { height: 100%; width: 100%; display: flex; flex-direction: column; }
+    header { background: #1e293b; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 1.1rem; }
+    #map { flex: 1; width: 100%; z-index: 1; }
+
+    .btn-floating {
+      position: absolute; bottom: 20px; right: 20px; z-index: 1000;
+      background: #2563eb; color: white; border: none; padding: 14px 20px;
+      border-radius: 30px; font-weight: bold; font-size: 1rem; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      cursor: pointer;
+    }
+
+    /* Modal Formulario */
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6); z-index: 2000; justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 450px;
+      max-height: 90vh; overflow-y: auto;
+    }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 0.85rem; font-weight: bold; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem;
+    }
+    .btn-submit { background: #16a34a; color: white; padding: 12px; border: none; border-radius: 6px; width: 100%; font-weight: bold; margin-top: 10px; cursor: pointer; font-size: 1rem; }
+    .btn-close { background: #dc2626; color: white; padding: 8px; border: none; border-radius: 6px; width: 100%; margin-top: 6px; cursor: pointer; }
+
+    /* Popups del mapa */
+    .popup-card h3 { margin-bottom: 6px; font-size: 1rem; color: #0f172a; }
+    .popup-card p { font-size: 0.85rem; margin-bottom: 4px; color: #334155; }
+    .popup-img { width: 100%; height: 150px; object-fit: cover; border-radius: 6px; margin: 6px 0; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; color: white; margin-bottom: 8px; }
+    .bg-ABIERTO { background: #dc2626; }
+    .bg-EN_VERIFICACION { background: #f59e0b; }
+    .bg-ATENDIENDO { background: #2563eb; }
+    .bg-CERRADO { background: #16a34a; }
+
+    .popup-actions { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+    .btn-status { border: none; padding: 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; color: white; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📍 Red de Ayudas Cali</h1>
+    <span id="gps-status" style="font-size:0.75rem; background:#334155; padding:4px 8px; border-radius:10px;">GPS: Buscando...</span>
+  </header>
+
+  <div id="map"></div>
+
+  <button class="btn-floating" onclick="abrirModal()">+ Reportar Punto</button>
+
+  <!-- Modal Crear Solicitud -->
+  <div class="modal" id="modalReporte">
+    <div class="modal-content">
+      <h2>Nuevo Reporte en Sitio</h2>
+      <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Se tomará tu ubicación GPS actual automáticamente.</p>
+
+      <div class="form-group">
+        <label>Nombre del Punto / Lugar</label>
+        <input type="text" id="nombrePunto" placeholder="Ej: Canchas Barrio Siloé">
+      </div>
+
+      <div class="form-group">
+        <label>Coordinador Encargado en Sitio</label>
+        <input type="text" id="coordinador" placeholder="Nombre y Teléfono de contacto">
+      </div>
+
+      <div class="form-group">
+        <label>¿Hay Personal Técnico / AV Presente?</label>
+        <select id="tecnicoPresente">
+          <option value="NO">NO (Requiere verificación)</option>
+          <option value="SI">SÍ (Técnicos verificando)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Foto del Lugar / Situación (Opcional)</label>
+        <!-- Permite abrir la cámara trasera en celulares o elegir de galería -->
+        <input type="file" id="fotoInput" accept="image/*" capture="environment">
+      </div>
+
+      <div class="form-group">
+        <label>Necesidades Específicas</label>
+        <textarea id="necesidades" rows="2" placeholder="Ej: Comida no perecedera, colchonetas, 5 voluntarios"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Situación / Estado Actual</label>
+        <textarea id="situacion" rows="2" placeholder="Acceso, riesgos, condiciones del sitio"></textarea>
+      </div>
+
+      <button class="btn-submit" id="btnGuardar" onclick="guardarPunto()">Guardar y Publicar Punto</button>
+      <button class="btn-close" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, doc, updateDoc, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
+
+    // ⚠️ REEMPLAZA apiKey, messagingSenderId Y appId CON TUS VALORES REALES DE FIREBASE
+    const firebaseConfig = {
+
+      apiKey: "AIzaSyC52vHtvd6l0lRhTq_iGkdSf0ljfHqN4oY",
+      authDomain: "red-ayudas-cali.firebaseapp.com",
+      projectId: "red-ayudas-cali",
+      storageBucket: "red-ayudas-cali.firebasestorage.app",
+      messagingSenderId: "560396986116",
+      appId: "1:560396986116:web:49c3f78d0a26d09e62d251"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    // Inicializar Mapa en Cali
+    const map = L.map('map').setView([3.4516, -76.5320], 13);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    let userLat = 3.4516;
+    let userLng = -76.5320;
+    let gpsConfirmado = false;
+    let markers = {};
+
+    // Obtener GPS del usuario (gpsConfirmado = true solo con señal real)
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        (pos) => {
+          userLat = pos.coords.latitude;
+          userLng = pos.coords.longitude;
+          gpsConfirmado = true;
+          document.getElementById('gps-status').innerText = "GPS: Preciso";
+          document.getElementById('gps-status').style.background = "#16a34a";
+        },
+        (err) => {
+          gpsConfirmado = false;
+          document.getElementById('gps-status').innerText = "GPS: Sin señal";
+          document.getElementById('gps-status').style.background = "#dc2626";
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // Colores de los Pines
+    function getIconColor(estado, tieneTecnico) {
+      let color = "red";
+      if (estado === "CERRADO") color = "green";
+      else if (estado === "ATENDIENDO") color = "blue";
+      else if (estado === "EN_VERIFICACION") color = "orange";
+      else if (tieneTecnico === "NO") color = "red";
+
+      return new L.Icon({
+        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41]
+      });
+    }
+
+    // Escuchar Firestore en Tiempo Real
+    onSnapshot(collection(db, "puntos_cali"), (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        const data = change.doc.data();
+        const id = change.doc.id;
+
+        if (change.type === "added" || change.type === "modified") {
+          if (markers[id]) map.removeLayer(markers[id]);
+
+          const icon = getIconColor(data.estado, data.tecnicoPresente);
+          const marker = L.marker([data.lat, data.lng], { icon: icon }).addTo(map);
+          const mapsUrl = `https://www.google.com/maps?q=${data.lat},${data.lng}`;
+
+          // Solo permitir URLs http(s) como imagen; cualquier otra cosa se ignora
+          const fotoHTML = (data.fotoUrl && (data.fotoUrl.startsWith('https://') || data.fotoUrl.startsWith('http://')))
+            ? `<img src="${escapeHTML(data.fotoUrl)}" class="popup-img" alt="Foto punto" onerror="this.style.display='none'">`
+            : '';
+
+          const popupContent = `
+            <div class="popup-card">
+              <span class="badge bg-${data.estado}">${escapeHTML(data.estado.replace('_', ' '))}</span>
+              <h3>${escapeHTML(data.nombrePunto)}</h3>
+              ${fotoHTML}
+              <p><strong>👤 Coord:</strong> ${escapeHTML(data.coordinador)}</p>
+              <p><strong>🛠️ Técnico en sitio:</strong> ${escapeHTML(data.tecnicoPresente)}</p>
+              <p><strong>📦 Necesidades:</strong> ${escapeHTML(data.necesidades)}</p>
+              <p><strong>⚠️ Situación:</strong> ${escapeHTML(data.situacion)}</p>
+              <p><a href="${mapsUrl}" target="_blank" style="color:#2563eb; font-weight:bold;">📍 Ver en Google Maps</a></p>
+
+              <div class="popup-actions">
+                <button class="btn-status" style="background:#f59e0b;" onclick="cambiarEstado('${id}', 'EN_VERIFICACION')">🟡 En Verificación (Enviar Técnico)</button>
+                <button class="btn-status" style="background:#2563eb;" onclick="cambiarEstado('${id}', 'ATENDIENDO')">🔵 Atendiendo / En Camino</button>
+                <button class="btn-status" style="background:#16a34a;" onclick="cambiarEstado('${id}', 'CERRADO')">🟢 Marcar Atendido / Cerrar</button>
+              </div>
+            </div>
+          `;
+
+          marker.bindPopup(popupContent);
+          markers[id] = marker;
+        }
+
+        if (change.type === "removed") {
+          if (markers[id]) {
+            map.removeLayer(markers[id]);
+            delete markers[id];
+          }
+        }
+      });
+    });
+
+    // Escapar HTML: protege contra XSS en datos provenientes de Firestore
+    function escapeHTML(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Comprimir imagen en cliente (Canvas ~300 KB) antes de subir a Storage
+    function comprimirImagen(file, maxWidth = 1000, calidad = 0.7) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+              (blob) => {
+                if (blob) resolve(blob);
+                else reject(new Error("Error al comprimir la imagen"));
+              },
+              'image/jpeg',
+              calidad
+            );
+          };
+        };
+        reader.onerror = (error) => reject(error);
+      });
+    }
+
+    // Guardar Punto en Firestore + Subir Foto
+    window.guardarPunto = async function() {
+      const nombre = document.getElementById('nombrePunto').value;
+      const coordinador = document.getElementById('coordinador').value;
+      const tecnicoPresente = document.getElementById('tecnicoPresente').value;
+      const necesidades = document.getElementById('necesidades').value;
+      const situacion = document.getElementById('situacion').value;
+      const fotoFile = document.getElementById('fotoInput').files[0];
+      const btnGuardar = document.getElementById('btnGuardar');
+
+      if (!nombre || !coordinador) {
+        alert("Por favor completa el nombre del punto y el coordinador.");
+        return;
+      }
+
+      // Validación GPS: sin señal real, pedir confirmación explícita
+      if (!gpsConfirmado) {
+        const continuar = confirm("⚠️ No hemos podido obtener tu ubicación GPS exacta. ¿Deseas usar la ubicación central por defecto?");
+        if (!continuar) return;
+      }
+
+      btnGuardar.disabled = true;
+      btnGuardar.innerText = "Subiendo datos y foto...";
+
+      let fotoUrl = null;
+
+      try {
+        // Subir foto a Firebase Storage si seleccionó archivo
+        if (fotoFile) {
+          // Comprimir antes de subir (crítico en redes móviles inestables)
+          const blobComprimido = await comprimirImagen(fotoFile);
+          // Nombre seguro: solo caracteres [A-Za-z0-9._-]
+          const nombreSeguro = (fotoFile.name || 'foto').replace(/[^a-zA-Z0-9._-]/g, '_');
+          const fileRef = ref(storage, `fotos_puntos/${Date.now()}_${nombreSeguro}`);
+          await uploadBytes(fileRef, blobComprimido);
+          fotoUrl = await getDownloadURL(fileRef);
+        }
+
+        // Crear documento en Firestore
+        await addDoc(collection(db, "puntos_cali"), {
+          nombrePunto: nombre,
+          coordinador: coordinador,
+          tecnicoPresente: tecnicoPresente,
+          necesidades: necesidades,
+          situacion: situacion,
+          fotoUrl: fotoUrl,
+          lat: userLat,
+          lng: userLng,
+          estado: "ABIERTO",
+          timestamp: serverTimestamp()
+        });
+
+        alert("¡Punto y foto publicados con éxito en el mapa!");
+        cerrarModal();
+      } catch (e) {
+        alert("Error al guardar: " + e.message);
+      } finally {
+        btnGuardar.disabled = false;
+        btnGuardar.innerText = "Guardar y Publicar Punto";
+      }
+    };
+
+    // Cambiar Estado en Firestore
+    window.cambiarEstado = async function(id, nuevoEstado) {
+      try {
+        const puntoRef = doc(db, "puntos_cali", id);
+        await updateDoc(puntoRef, { estado: nuevoEstado });
+      } catch (e) {
+        alert("Error actualizando estado: " + e.message);
+      }
+    };
+
+    // Funciones del Modal
+    window.abrirModal = () => document.getElementById('modalReporte').style.display = 'flex';
+    window.cerrarModal = () => document.getElementById('modalReporte').style.display = 'none';
+  </script>
+</body>
+</html>

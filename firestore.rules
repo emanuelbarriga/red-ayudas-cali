@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /puntos_cali/{document} {
+
+      // Valida el documento COMPLETO (create y update) contra el esquema
+      // y el bounding box geográfico de Cali. Impide reescribir coordenadas,
+      // nombres o estados fuera del dominio permitido.
+      function esPuntoValido() {
+        let data = request.resource.data;
+        return data.keys().hasAll(['nombrePunto', 'coordinador', 'tecnicoPresente', 'lat', 'lng', 'estado'])
+          && data.nombrePunto is string && data.nombrePunto.size() > 0 && data.nombrePunto.size() <= 150
+          && data.coordinador is string && data.coordinador.size() > 0 && data.coordinador.size() <= 100
+          && data.tecnicoPresente in ['SI', 'NO']
+          && data.lat is number && data.lat >= 3.20 && data.lat <= 3.55
+          && data.lng is number && data.lng >= -76.65 && data.lng <= -76.45
+          && data.estado in ['ABIERTO', 'EN_VERIFICACION', 'ATENDIENDO', 'CERRADO'];
+      }
+
+      allow read: if true;
+      // Los nuevos reportes siempre nacen ABIERTO
+      allow create: if esPuntoValido() && request.resource.data.estado == 'ABIERTO';
+      // Actualización: el documento resultante debe seguir siendo válido
+      allow update: if esPuntoValido();
+      allow delete: if false; // BLOQUEO TOTAL DE BORRADO
+    }
+  }
+}
