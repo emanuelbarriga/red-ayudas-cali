@@ -10,7 +10,7 @@
 
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-    body, html { height: 100%; width: 100%; display: flex; flex-direction: column; }
+    body, html { height: 100%; width: 100%; display: flex; flex-direction: column; overflow: hidden; }
     header { background: #1e293b; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 1.1rem; }
     #map-container { position: relative; flex: 1; width: 100%; min-height: 300px; }
@@ -96,12 +96,11 @@
     @media (max-width: 768px) {
       body { display: flex; flex-direction: column; margin: 0; padding: 0; }
 
-      /* Mapa fijo arriba: deja ver la tabla/formulario debajo */
+      /* Vista mapa: pantalla completa, sin huecos blancos */
       #map-container {
-        height: 45vh; width: 100%;
-        position: sticky; top: 0; z-index: 500;
-        flex: none; min-height: 0;
+        flex: 1; width: 100%; min-height: 0; position: relative;
       }
+      #vista-mapa { flex: 1; min-height: 0; }
 
       /* Tabla con scroll horizontal suave */
       .tabla-container {
@@ -152,6 +151,7 @@
   <div class="modal" id="modalReporte">
     <div class="modal-content">
       <h2>Nuevo Reporte en Sitio</h2>
+      <p id="coordsText" style="font-size: 0.8rem; color: #16a34a; font-weight: bold; background: #e8f8f5; padding: 6px 10px; border-radius: 6px; margin-bottom: 12px;"></p>
       <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Mueve el mapa para ubicar el punto exacto con el pin central 📍. Se usará esa posición.</p>
 
       <div class="form-group">
@@ -183,8 +183,8 @@
 
       <div class="form-group">
         <label>Foto del Lugar / Situación (Opcional)</label>
-        <!-- Permite abrir la cámara trasera en celulares o elegir de galería -->
-        <input type="file" id="fotoInput" accept="image/*" capture="environment">
+        <!-- Sin capture="environment": permite elegir entre cámara y galería -->
+        <input type="file" id="fotoInput" accept="image/*">
       </div>
 
       <div class="form-group">
@@ -647,6 +647,47 @@
       }
     };
 
+    // Geocodificación inversa con Nominatim/OpenStreetMap:
+    // convierte las coordenadas del pin central en nombre de sector/barrio
+    async function obtenerDireccionGPS(lat, lng) {
+      const inputNombre = document.getElementById('nombrePunto');
+      if (!inputNombre) return;
+
+      // No sobrescribir si el usuario ya escribió un nombre
+      if (inputNombre.value.trim()) return;
+
+      const originalPlaceholder = inputNombre.placeholder;
+      inputNombre.placeholder = "⌛ Obteniendo dirección por GPS...";
+
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=es&zoom=18`
+        );
+        if (!res.ok) throw new Error('Nominatim respondió ' + res.status);
+        const data = await res.json();
+
+        if (data && data.address) {
+          const sector = data.address.neighbourhood
+            || data.address.suburb
+            || data.address.road
+            || data.address.amenity
+            || data.address.village
+            || data.address.town;
+          const ciudad = data.address.city || data.address.state_district || "Cali";
+
+          if (sector) {
+            inputNombre.value = `${sector}, ${ciudad}`;
+          } else if (data.display_name) {
+            inputNombre.value = `${data.display_name.split(',')[0]}, ${ciudad}`;
+          }
+        }
+      } catch (e) {
+        console.warn("No se pudo obtener el nombre por GPS:", e);
+      } finally {
+        inputNombre.placeholder = originalPlaceholder;
+      }
+    }
+
     // Funciones del Modal
     window.abrirModal = () => {
       // Punto de partida del pin central: tu posición GPS real si hay señal,
@@ -654,6 +695,17 @@
       if (gpsConfirmado) {
         map.setView([userLat, userLng], 15);
       }
+
+      // Confirmación visual de la coordenada seleccionada con el pin
+      const centro = map.getCenter();
+      const coordsEl = document.getElementById('coordsText');
+      if (coordsEl) {
+        coordsEl.innerText = `📍 Coordenadas: ${centro.lat.toFixed(5)}, ${centro.lng.toFixed(5)}`;
+      }
+
+      // Autonombrar el lugar por GPS (geocodificación inversa)
+      obtenerDireccionGPS(centro.lat, centro.lng);
+
       document.getElementById('modalReporte').style.display = 'flex';
     };
     window.cerrarModal = () => document.getElementById('modalReporte').style.display = 'none';
